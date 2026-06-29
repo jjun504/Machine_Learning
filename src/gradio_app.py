@@ -16,10 +16,73 @@ products_df = pd.read_csv(os.path.join(config.RAW_DATA_DIR, "products.csv"))
 prod_id_to_name = dict(zip(products_df['product_id'], products_df['product_name']))
 prod_name_to_id = dict(zip(products_df['product_name'], products_df['product_id']))
 
-# Popular products (top 50 in raw prior)
+# Popular products (top 50 in raw prior, used for legacy "popular products" tag)
 prior_df = pd.read_csv(config.PRIOR_PRODUCTS_SAMPLE_PATH)
 popular_ids = prior_df['product_id'].value_counts().head(50).index.tolist()
 popular_products = [prod_id_to_name[pid] for pid in popular_ids if pid in prod_id_to_name]
+
+# Build dropdown choices for the "Add Items to Cart" widget, ranked by overall
+# popularity in the sampled prior data. Each choice is a (display_label, pid)
+# tuple so the UI cannot collide on duplicate product names (e.g. "Banana"
+# vs. "Bag of Organic Bananas") and the value returned to the backend is the
+# unambiguous product_id.
+_top_pids_for_dropdown = prior_df['product_id'].value_counts().head(500).index.tolist()
+cart_dropdown_choices = []
+for pid in _top_pids_for_dropdown:
+    pid_int = int(pid)
+    name = prod_id_to_name.get(pid_int, f"Product {pid_int}")
+    cart_dropdown_choices.append((f"{name}  (#{pid_int})", pid_int))
+
+# Cache orders dataframe once, also build per-user prior-order lookups so the
+# Transformer can be fed the same sequence shape it was trained on.
+orders_df = pd.read_csv(config.ORDERS_SAMPLE_PATH)
+_prior_orders_meta = (
+    orders_df[orders_df['eval_set'] == 'prior']
+    .sort_values(by='order_number')
+)
+user_to_prior_order_ids = _prior_orders_meta.groupby('user_id')['order_id'].apply(list).to_dict()
+order_id_to_products = prior_df.groupby('order_id')['product_id'].apply(list).to_dict()
+
+def build_transformer_input(user_id, extra_cart_pids=None):
+    """
+    Replicates ``prepare_transformer_sequences`` for a single user.
+    The Transformer expects the user's real prior order history right-aligned
+    in a (MAX_SEQ_LEN, MAX_PRODUCTS_PER_ORDER) tensor, with a parallel mask.
+
+    If ``extra_cart_pids`` is given, those products are appended as the most
+    recent basket (representing "this is what the user just added to cart"),
+    pushing out the oldest prior order if necessary.
+    """
+    max_seq_len = config.MAX_SEQ_LEN
+    max_prod = config.MAX_PRODUCTS_PER_ORDER
+
+    seq = np.zeros((max_seq_len, max_prod), dtype=np.int32)
+    mask = np.zeros(max_seq_len, dtype=np.int32)
+
+    user_prior_oids = user_to_prior_order_ids.get(int(user_id), [])
+
+    # Reserve the last slot for the simulated cart if the UI supplied one.
+    if extra_cart_pids:
+        history_quota = max_seq_len - 1
+    else:
+        history_quota = max_seq_len
+
+    history_oids = user_prior_oids[-history_quota:] if history_quota > 0 else []
+
+    # Right-align the history baskets so padding sits on the left.
+    history_baskets = []
+    for oid in history_oids:
+        history_baskets.append(order_id_to_products.get(oid, []))
+    if extra_cart_pids:
+        history_baskets.append(list(extra_cart_pids))
+
+    start_idx = max_seq_len - len(history_baskets)
+    for offset, products in enumerate(history_baskets):
+        padded = list(products[:max_prod]) + [0] * max(0, max_prod - len(products[:max_prod]))
+        seq[start_idx + offset] = padded
+        mask[start_idx + offset] = 1
+
+    return seq, mask
 
 # Load MF model and mappings
 print("Loading Matrix Factorization model...")
@@ -83,10 +146,9 @@ def make_html_cards(recommendations):
 
 def get_user_history_html(user_id):
     user_id = int(user_id)
-    # Find user's historical purchases in prior dataset
-    orders = pd.read_csv(config.ORDERS_SAMPLE_PATH)
-    user_orders = orders[orders['user_id'] == user_id]['order_id'].tolist()
-    
+    # Find user's historical purchases in prior dataset (uses cached orders_df)
+    user_orders = orders_df[orders_df['user_id'] == user_id]['order_id'].tolist()
+
     user_prior = prior_df[prior_df['order_id'].isin(user_orders)]
     history_counts = user_prior['product_id'].value_counts()
     
@@ -120,8 +182,12 @@ def get_user_history_html(user_id):
     html += '</div>'
     return html
 
-def make_predictions(user_id, selected_names):
+def make_predictions(user_id, selected_cart):
     user_id = int(user_id)
+    # ``selected_cart`` is whatever the multi-select dropdown returns. With the
+    # new (label, pid) choice format the values are ints (pids); we still
+    # accept legacy string labels for backward compatibility with the harness.
+    selected_cart = selected_cart or []
     
     # 1. Matrix Factorization (NCF) Recommendations (Static for User)
     mf_recs_data = []
@@ -157,30 +223,43 @@ def make_predictions(user_id, selected_names):
             xgb_recs_data.append((name, "XGB F1 Prob", float(probs[idx])))
 
     # 3. Sequential Transformer Recommendations (Dynamic based on shopping sequence!)
-    selected_ids = [prod_name_to_id[name] for name in selected_names if name in prod_name_to_id]
-    
-    if not selected_ids:
-        # Build empty sequence
-        seq = np.zeros((config.MAX_SEQ_LEN, config.MAX_PRODUCTS_PER_ORDER), dtype=np.int32)
-        mask = np.zeros(config.MAX_SEQ_LEN, dtype=np.int32)
-    else:
-        # User selected some items! Build a custom sequence of 1 order
-        products_padded = selected_ids[:config.MAX_PRODUCTS_PER_ORDER] + [0] * max(0, config.MAX_PRODUCTS_PER_ORDER - len(selected_ids))
-        seq = np.zeros((config.MAX_SEQ_LEN, config.MAX_PRODUCTS_PER_ORDER), dtype=np.int32)
-        seq[-1] = products_padded
-        mask = np.zeros(config.MAX_SEQ_LEN, dtype=np.int32)
-        mask[-1] = 1
-        
+    selected_ids = []
+    for item in selected_cart:
+        if isinstance(item, (int, np.integer)):
+            selected_ids.append(int(item))
+        elif isinstance(item, str) and item in prod_name_to_id:
+            selected_ids.append(int(prod_name_to_id[item]))
+
+    # Feed the Transformer the user's real prior history right-aligned in the
+    # same shape it was trained on. If the UI supplied a cart, append it as
+    # the most recent basket so the prediction stays personalised AND
+    # responsive to the cart.
+    seq, mask = build_transformer_input(user_id, extra_cart_pids=selected_ids)
+
     s_b = ms.Tensor([seq], dtype=ms.int32)
     m_b = ms.Tensor([mask], dtype=ms.int32)
     logits = tf_model(s_b, m_b)
     probs = ops.sigmoid(logits).asnumpy()[0]
-    
-    top_indices = np.argsort(probs)[::-1][:10]
+
     tf_recs_data = []
-    for idx in top_indices:
-        name = prod_id_to_name.get(idx, f"Product {idx}")
-        tf_recs_data.append((name, "Next Prob", float(probs[idx])))
+    if not user_cands.empty:
+        # Candidate-restricted ranking: align the Transformer's reporting
+        # surface with NCF and XGBoost so all three columns recommend within
+        # the same per-user pool of historically-bought products.
+        cand_pids = user_cands['product_id'].values.astype(np.int32)
+        cand_pids = cand_pids[cand_pids < num_products_vocab]
+        cand_probs = probs[cand_pids]
+        order = np.argsort(cand_probs)[::-1][:10]
+        for k in order:
+            pid = int(cand_pids[k])
+            name = prod_id_to_name.get(pid, f"Product {pid}")
+            tf_recs_data.append((name, "Next Prob", float(cand_probs[k])))
+    else:
+        # Cold-start fallback: user has no candidates, show vocab-wide Top-10.
+        top_indices = np.argsort(probs)[::-1][:10]
+        for idx in top_indices:
+            name = prod_id_to_name.get(int(idx), f"Product {int(idx)}")
+            tf_recs_data.append((name, "Next Prob", float(probs[idx])))
 
     return (
         make_html_cards(tf_recs_data),
@@ -219,10 +298,10 @@ with gr.Blocks(title="Instacart Market Basket Recommender Sandbox", css="""
         with gr.Column(scale=2):
             gr.Markdown("### Step 2: Add Items to Current Cart (Build Shopping Sequence)")
             cart_items = gr.Dropdown(
-                choices=list(prod_name_to_id.keys())[:500] + popular_products,
+                choices=cart_dropdown_choices,
                 multiselect=True,
                 label="Add Items to Cart",
-                info="Type to search and select products to add to your custom cart."
+                info="Search the top-500 most-purchased SKUs. The (#id) suffix disambiguates same-named products."
             )
             
             predict_btn = gr.Button("Predict Next Purchase", variant="primary")

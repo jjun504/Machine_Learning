@@ -234,8 +234,9 @@ def grid_search_mf(param_grid=None):
     p_train, p_val = p_sub[:split], p_sub[split:]
     y_train, y_val = y_sub[:split], y_sub[split:]
     
-    best_loss = float('inf')
+    best_auc = -1.0
     best_params = {}
+    from sklearn.metrics import roc_auc_score
     
     print("NCF Grid Search started...", flush=True)
     for dim in param_grid['embedding_dim']:
@@ -263,21 +264,27 @@ def grid_search_mf(param_grid=None):
             model.set_train(False)
             val_loss = 0.0
             val_steps = 0
+            all_probs = []
             for i in range(0, len(u_val), batch_size):
                 u_b = ms.Tensor(u_val[i:i+batch_size], dtype=ms.int32)
                 p_b = ms.Tensor(p_val[i:i+batch_size], dtype=ms.int32)
                 y_b = ms.Tensor(y_val[i:i+batch_size], dtype=ms.float32)
-                loss = loss_fn(model(u_b, p_b), y_b)
+                logits = model(u_b, p_b)
+                loss = loss_fn(logits, y_b)
                 val_loss += float(loss.asnumpy())
                 val_steps += 1
                 
+                probs = ops.sigmoid(logits).asnumpy()
+                all_probs.extend(probs.tolist())
+                
             avg_val_loss = val_loss / val_steps
-            print(f"NCF Grid Search trial: embedding_dim={dim}, lr={lr} -> Val Loss={avg_val_loss:.4f}", flush=True)
-            if avg_val_loss < best_loss:
-                best_loss = avg_val_loss
+            val_auc = roc_auc_score(y_val, np.array(all_probs))
+            print(f"NCF Grid Search trial: embedding_dim={dim}, lr={lr} -> Val Loss={avg_val_loss:.4f}, Val ROC AUC={val_auc:.4f}", flush=True)
+            if val_auc > best_auc:
+                best_auc = val_auc
                 best_params = {'embedding_dim': dim, 'lr': lr}
                 
-    print(f"NCF Grid Search finished. Best Params: {best_params} (Val Loss: {best_loss:.4f})", flush=True)
+    print(f"NCF Grid Search finished. Best Params: {best_params} (Val ROC AUC: {best_auc:.4f})", flush=True)
     return best_params
 
 def load_mf_model_and_mappings():

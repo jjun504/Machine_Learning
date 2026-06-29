@@ -304,7 +304,7 @@ def grid_search_xgboost(param_grid=None):
     X_val = val_subset[feature_cols].values
     y_val = val_subset['target'].values
     
-    best_loss = float('inf')
+    best_auc = -1.0
     best_params = {}
     
     print("XGBoost Grid Search started...", flush=True)
@@ -321,12 +321,13 @@ def grid_search_xgboost(param_grid=None):
             
             preds = model.predict_proba(X_val)[:, 1]
             loss = log_loss(y_val, preds)
-            print(f"XGBoost Grid Search trial: max_depth={depth}, learning_rate={lr} -> Val Logloss={loss:.4f}", flush=True)
-            if loss < best_loss:
-                best_loss = loss
+            auc = roc_auc_score(y_val, preds)
+            print(f"XGBoost Grid Search trial: max_depth={depth}, learning_rate={lr} -> Val Logloss={loss:.4f}, Val ROC AUC={auc:.4f}", flush=True)
+            if auc > best_auc:
+                best_auc = auc
                 best_params = {'max_depth': depth, 'learning_rate': lr}
                 
-    print(f"XGBoost Grid Search finished. Best Params: {best_params} (Val Logloss: {best_loss:.4f})", flush=True)
+    print(f"XGBoost Grid Search finished. Best Params: {best_params} (Val ROC AUC: {best_auc:.4f})", flush=True)
     return best_params
 
 if __name__ == "__main__":

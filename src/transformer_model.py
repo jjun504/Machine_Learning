@@ -383,8 +383,9 @@ def grid_search_transformer(param_grid=None):
     mask_train, mask_val = mask_sub[:split], mask_sub[split:]
     target_train, target_val = target_sub[:split], target_sub[split:]
     
-    best_loss = float('inf')
+    best_auc = -1.0
     best_params = {}
+    from sklearn.metrics import roc_auc_score
     
     print("Transformer Grid Search started...", flush=True)
     for dim in param_grid['embedding_dim']:
@@ -418,21 +419,27 @@ def grid_search_transformer(param_grid=None):
             model.set_train(False)
             val_loss = 0.0
             val_steps = 0
+            val_probs = []
             for i in range(0, len(seq_val), batch_size):
                 s_b = ms.Tensor(seq_val[i:i+batch_size], dtype=ms.int32)
                 m_b = ms.Tensor(mask_val[i:i+batch_size], dtype=ms.int32)
                 t_b = ms.Tensor(target_val[i:i+batch_size], dtype=ms.float32)
-                loss = loss_fn(model(s_b, m_b), t_b)
+                logits = model(s_b, m_b)
+                loss = loss_fn(logits, t_b)
                 val_loss += float(loss.asnumpy())
                 val_steps += 1
                 
+                probs = ops.sigmoid(logits).asnumpy()
+                val_probs.extend(probs.tolist())
+                
             avg_val_loss = val_loss / val_steps
-            print(f"Transformer Grid Search trial: embedding_dim={dim}, lr={lr} -> Val Loss={avg_val_loss:.4f}", flush=True)
-            if avg_val_loss < best_loss:
-                best_loss = avg_val_loss
+            val_auc = roc_auc_score(target_val.flatten(), np.array(val_probs).flatten())
+            print(f"Transformer Grid Search trial: embedding_dim={dim}, lr={lr} -> Val Loss={avg_val_loss:.4f}, Val ROC AUC={val_auc:.4f}", flush=True)
+            if val_auc > best_auc:
+                best_auc = val_auc
                 best_params = {'embedding_dim': dim, 'lr': lr}
                 
-    print(f"Transformer Grid Search finished. Best Params: {best_params} (Val Loss: {best_loss:.4f})", flush=True)
+    print(f"Transformer Grid Search finished. Best Params: {best_params} (Val ROC AUC: {best_auc:.4f})", flush=True)
     return best_params
 
 if __name__ == "__main__":
