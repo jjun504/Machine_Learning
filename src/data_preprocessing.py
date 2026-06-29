@@ -8,7 +8,7 @@ def run_preprocessing(force=False):
     if not force and os.path.exists(config.ORDERS_SAMPLE_PATH) and \
        os.path.exists(config.PRIOR_PRODUCTS_SAMPLE_PATH) and \
        os.path.exists(config.TRAIN_PRODUCTS_SAMPLE_PATH):
-        print("Preprocessed sample files already exist. Skipping preprocessing.")
+        print("Preprocessed sample files is already exist. Skip preprocessing.")
         return
 
     print("Starting data preprocessing and sampling...")
@@ -19,22 +19,26 @@ def run_preprocessing(force=False):
     print(f"Loading orders from {orders_path}...")
     orders = pd.read_csv(orders_path)
     
-    # 2. Filter users with a train order
+    # 2. Filter users that have train order
     train_users = orders[orders['eval_set'] == 'train']['user_id'].unique()
     print(f"Total users with a target order in train set: {len(train_users)}")
     
-    # 3. Sample users
+    # 3. Do sampling for users
     sampled_users = np.random.choice(
         train_users, 
         size=min(config.NUM_USERS, len(train_users)), 
         replace=False
     )
+    # print("sampled_users length is:", len(sampled_users))
     print(f"Sampled {len(sampled_users)} users for training and validation.")
     
-    # 4. Split users into Train (80%) and Validation (20%)
+    # 4. Split user to Train (80%) and Val (20%)
     shuffled_users = sampled_users.copy()
     np.random.shuffle(shuffled_users)
     split_idx = int(len(shuffled_users) * 0.8)
+    # train_size = int(len(shuffled_users) * 0.7)
+    # train_user_set = set(shuffled_users[:train_size])
+    # val_user_set = set(shuffled_users[train_size:])
     train_user_set = set(shuffled_users[:split_idx])
     
     # 5. Filter orders for sampled users
@@ -72,7 +76,7 @@ def run_preprocessing(force=False):
     orders_sample.to_csv(config.ORDERS_SAMPLE_PATH, index=False)
     prior_sample.to_csv(config.PRIOR_PRODUCTS_SAMPLE_PATH, index=False)
     train_sample.to_csv(config.TRAIN_PRODUCTS_SAMPLE_PATH, index=False)
-    print("Preprocessing completed successfully!")
+    print("Preprocessing complete successfully!")
 
 if __name__ == "__main__":
     run_preprocessing(force=True)

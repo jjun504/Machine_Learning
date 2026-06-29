@@ -77,6 +77,9 @@ def evaluate_matrix_factorization_val():
     roc_auc = roc_auc_score(y_val, val_preds)
     
     # Sweep threshold for Mean F1
+    # for thresh in [0.1, 0.2, 0.3, 0.4]:
+    #     f1 = calculate_mean_f1(y_val, val_preds, candidates_mapped, threshold=thresh)
+    #     print(f"thresh {thresh} f1 {f1}")
     best_f1 = 0.0
     best_thresh = 0.2
     for thresh in np.arange(0.1, 0.5, 0.05):
@@ -141,6 +144,7 @@ def evaluate_transformer_candidate_val():
         val_preds_vocab.append(probs)
         
     val_preds_vocab = np.concatenate(val_preds_vocab, axis=0)
+    # print("val_preds_vocab shape:", val_preds_vocab.shape)
     
     # Generate candidates
     prior_orders = orders_sample[orders_sample['eval_set'] == 'prior'].copy()
@@ -212,18 +216,21 @@ def main():
     t_start = time.time()
     train_matrix_factorization()
     times['Matrix Factorization'] = time.time() - t_start
+    # print("MF Time elapsed:", times['Matrix Factorization'])
     print("-" * 50)
     
     # Step 3: XGBoost Model
     t_start = time.time()
     train_xgboost()
     times['XGBoost'] = time.time() - t_start
+    # print("XGB Time elapsed:", times['XGBoost'])
     print("-" * 50)
     
     # Step 4: Transformer Model
     t_start = time.time()
     train_transformer()
     times['Transformer'] = time.time() - t_start
+    # print("TF Time elapsed:", times['Transformer'])
     print("-" * 50)
     
     # Load saved metrics

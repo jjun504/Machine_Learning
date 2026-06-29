@@ -7,11 +7,13 @@ ROOT_DIR = r"c:\Users\chenj\OneDrive\Desktop\UUU\Machine Learning\Project\code"
 RAW_DATA_DIR = os.path.join(ROOT_DIR, "data", "raw")
 PROCESSED_DATA_DIR = os.path.join(ROOT_DIR, "data", "processed")
 
-# Create processed directory if it doesn't exist
+# Create processed directory if it is not exist
 os.makedirs(PROCESSED_DATA_DIR, exist_ok=True)
 
 # Dataset configuration
-NUM_USERS = 5000  # Number of users to sample
+# NUM_USERS = 1000  # too small for train
+# NUM_USERS = 20000  # memory error on my computer
+NUM_USERS = 5000  # Number of user to sample
 RANDOM_SEED = 42
 
 # Preprocessed CSV file paths

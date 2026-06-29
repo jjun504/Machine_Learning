@@ -13,22 +13,24 @@ from src.matrix_factorization import load_mf_model_and_mappings
 def extract_features_and_candidates():
     print("Extracting features and generating candidates for XGBoost...")
     
-    # 1. Load data
+    # 1. Load data files
     orders = pd.read_csv(config.ORDERS_SAMPLE_PATH)
     prior_products = pd.read_csv(config.PRIOR_PRODUCTS_SAMPLE_PATH)
     train_products = pd.read_csv(config.TRAIN_PRODUCTS_SAMPLE_PATH)
+    # print("orders count: ", len(orders))
     
     prior_orders = orders[orders['eval_set'] == 'prior'].copy()
     
-    # Merge prior products with orders to get detailed info
+    # Merge prior products with orders for getting detailed info
     prior_details = pd.merge(prior_products, prior_orders, on='order_id')
     
-    # 2. User Features
+    # 2. Calculate User Features
     print("Computing User features...")
     user_features = pd.DataFrame()
-    # Total prior orders
+    # Total count of prior orders
     user_features['user_total_orders'] = prior_orders.groupby('user_id')['order_number'].max()
-    # Average basket size
+    # Average size of basket
+    # # user_features['user_avg_basket_size'] = prior_details.groupby('user_id')['product_id'].count() / user_features['user_total_orders']
     basket_sizes = prior_details.groupby(['user_id', 'order_id']).size().reset_index(name='basket_size')
     user_features['user_avg_basket_size'] = basket_sizes.groupby('user_id')['basket_size'].mean()
     # User reorder rate

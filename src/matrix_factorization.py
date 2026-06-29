@@ -77,9 +77,10 @@ def prepare_mf_data(orders_sample, prior_sample):
     pos_products = user_product_pairs['product_id'].values
     
     num_positives = len(pos_users)
+    # print("Positive users count:", len(pos_users))
     print(f"Positive interaction pairs: {num_positives}")
     
-    # 3. Negative Sampling: for each positive pair, sample 4 negative products
+    # 3. Do negative sampling: for each positive, sample 4 negatives
     num_negatives = num_positives * 4
     neg_users = np.repeat(pos_users, 4)
     
@@ -87,6 +88,14 @@ def prepare_mf_data(orders_sample, prior_sample):
     user_bought_set = user_product_pairs.groupby('user_idx')['product_id'].apply(set).to_dict()
     
     print("Sampling negative user-product pairs...")
+    # neg_products = []
+    # for u in neg_users:
+    #     while True:
+    #         p = np.random.choice(unique_products)
+    #         if p not in user_bought_set[u]:
+    #             neg_products.append(p)
+    #             break
+    
     # Pre-sample all negative products at once to optimize performance
     neg_products = np.random.choice(unique_products, size=len(neg_users))
     
@@ -182,15 +191,15 @@ def train_matrix_factorization():
         avg_loss = epoch_loss / steps
         print(f"Epoch {epoch + 1}/{config.MF_EPOCHS}: Loss = {avg_loss:.4f}", flush=True)
         
-    # Save model checkpoint
+    # Save checkpoint of model
     ckpt_path = os.path.join(config.PROCESSED_DATA_DIR, "mf_model.ckpt")
     ms.save_checkpoint(model, ckpt_path)
-    print(f"Matrix Factorization model saved to {ckpt_path}", flush=True)
+    print(f"Matrix Factorization model save to {ckpt_path}", flush=True)
     return model, mappings
-
+ 
 def load_mf_model_and_mappings():
     """
-    Helper function to load the trained MF model and index mappings.
+    Helper function for load model and mappings
     """
     mappings_path = os.path.join(config.PROCESSED_DATA_DIR, "mf_mappings.pkl")
     ckpt_path = os.path.join(config.PROCESSED_DATA_DIR, "mf_model.ckpt")

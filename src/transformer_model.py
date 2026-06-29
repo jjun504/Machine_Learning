@@ -24,8 +24,9 @@ class SequentialTransformer(nn.Cell):
         self.max_seq_len = max_seq_len
         self.embedding_dim = embedding_dim
         
-        # Shared product embedding
+        # Shared product embedding table
         self.prod_emb = nn.Embedding(num_products, embedding_dim, embedding_table="xavier_uniform")
+        # prod_table = self.prod_emb.weight
         
         # Learned positional embedding for order sequence
         self.pos_emb = nn.Embedding(max_seq_len, embedding_dim, embedding_table="xavier_uniform")
@@ -41,7 +42,7 @@ class SequentialTransformer(nn.Cell):
         )
         self.transformer = nn.TransformerEncoder(encoder_layer, num_layers=num_layers)
         
-        # Output classification layer (projects to all products)
+        # Output classification layer for project to all product
         self.fc = nn.Dense(embedding_dim, num_products, weight_init="xavier_uniform")
         
     def construct(self, order_sequences, order_mask):
@@ -205,6 +206,9 @@ def train_transformer():
     grad_fn = ms.value_and_grad(forward_fn, None, optimizer.parameters)
 
     def train_step(seqs, masks, targets):
+        # loss = forward_fn(seqs, masks, targets)
+        # loss.backward()
+        # optimizer.step()
         loss, grads = grad_fn(seqs, masks, targets)
         optimizer(grads)
         return loss
@@ -251,9 +255,9 @@ def train_transformer():
     # Save checkpoint
     ckpt_path = os.path.join(config.PROCESSED_DATA_DIR, "transformer_model.ckpt")
     ms.save_checkpoint(model, ckpt_path)
-    print(f"Transformer model saved to {ckpt_path}", flush=True)
+    print(f"Transformer model save to {ckpt_path}", flush=True)
     
-    # 4. Evaluation
+    # 4. Do evaluation
     print("Evaluating Transformer model on validation set...")
     model.set_train(False)
     
@@ -267,13 +271,15 @@ def train_transformer():
         m_b = ms.Tensor(masks_val[i : i + batch_size], dtype=ms.int32)
         
         logits = model(s_b, m_b)
+        # probs = ms.sigmoid(logits).asnumpy()
         probs = ops.sigmoid(logits).asnumpy()
         val_preds.append(probs)
         
     val_preds = np.concatenate(val_preds, axis=0)
+    # print("val_preds shape is:", val_preds.shape)
     
     # Evaluation Metrics
-    # Since we do multi-label classification, we can calculate ROC AUC and F1-score
+    # Because it is multi-label classification, we calculate ROC AUC and F1
     # For ROC AUC, we average AUC over validation users
     user_aucs = []
     user_f1s = []
