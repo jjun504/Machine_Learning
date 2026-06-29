@@ -342,5 +342,98 @@ def train_transformer():
         
     return model, metrics
 
+def grid_search_transformer(param_grid=None):
+    """
+    Perform Grid Search for Sequential Transformer on a small subset of sequences
+    """
+    if param_grid is None:
+        param_grid = {
+            'embedding_dim': [32, 64],
+            'lr': [0.001, 0.005]
+        }
+        
+    print("Preparing data for Sequential Transformer Grid Search...", flush=True)
+    orders_sample = pd.read_csv(config.ORDERS_SAMPLE_PATH)
+    prior_sample = pd.read_csv(config.PRIOR_PRODUCTS_SAMPLE_PATH)
+    train_sample = pd.read_csv(config.TRAIN_PRODUCTS_SAMPLE_PATH)
+    
+    dataset = prepare_transformer_sequences(orders_sample, prior_sample, train_sample)
+    sequences = dataset['sequences']
+    masks = dataset['masks']
+    
+    # Process targets to multi-hot format
+    num_products_vocab = dataset['num_products_vocab']
+    targets_multihot = []
+    for actual_list in dataset['targets']:
+        y_true = np.zeros(num_products_vocab, dtype=np.float32)
+        valid_items = [p for p in actual_list if p < num_products_vocab]
+        y_true[valid_items] = 1.0
+        targets_multihot.append(y_true)
+    targets_multihot = np.array(targets_multihot, dtype=np.float32)
+    
+    # Subsample sequences for speed
+    np.random.seed(config.RANDOM_SEED)
+    subset_indices = np.random.choice(len(sequences), size=min(1000, len(sequences)), replace=False)
+    seq_sub = sequences[subset_indices]
+    mask_sub = masks[subset_indices]
+    target_sub = targets_multihot[subset_indices]
+    
+    split = int(len(seq_sub) * 0.8)
+    seq_train, seq_val = seq_sub[:split], seq_sub[split:]
+    mask_train, mask_val = mask_sub[:split], mask_sub[split:]
+    target_train, target_val = target_sub[:split], target_sub[split:]
+    
+    best_loss = float('inf')
+    best_params = {}
+    
+    print("Transformer Grid Search started...", flush=True)
+    for dim in param_grid['embedding_dim']:
+        for lr in param_grid['lr']:
+            model = SequentialTransformer(
+                num_products=num_products_vocab,
+                embedding_dim=dim,
+                num_heads=4,
+                num_layers=1,  # 1 layer for fast search
+                max_seq_len=config.MAX_SEQ_LEN
+            )
+            loss_fn = nn.BCEWithLogitsLoss()
+            optimizer = nn.Adam(model.trainable_params(), learning_rate=lr)
+            
+            def forward_fn(s, m, t):
+                logits = model(s, m)
+                return loss_fn(logits, t)
+                
+            grad_fn = ms.value_and_grad(forward_fn, None, optimizer.parameters)
+            
+            model.set_train()
+            batch_size = 128
+            # Train for 1 epoch
+            for i in range(0, len(seq_train), batch_size):
+                s_b = ms.Tensor(seq_train[i:i+batch_size], dtype=ms.int32)
+                m_b = ms.Tensor(mask_train[i:i+batch_size], dtype=ms.int32)
+                t_b = ms.Tensor(target_train[i:i+batch_size], dtype=ms.float32)
+                loss, grads = grad_fn(s_b, m_b, t_b)
+                optimizer(grads)
+                
+            model.set_train(False)
+            val_loss = 0.0
+            val_steps = 0
+            for i in range(0, len(seq_val), batch_size):
+                s_b = ms.Tensor(seq_val[i:i+batch_size], dtype=ms.int32)
+                m_b = ms.Tensor(mask_val[i:i+batch_size], dtype=ms.int32)
+                t_b = ms.Tensor(target_val[i:i+batch_size], dtype=ms.float32)
+                loss = loss_fn(model(s_b, m_b), t_b)
+                val_loss += float(loss.asnumpy())
+                val_steps += 1
+                
+            avg_val_loss = val_loss / val_steps
+            print(f"Transformer Grid Search trial: embedding_dim={dim}, lr={lr} -> Val Loss={avg_val_loss:.4f}", flush=True)
+            if avg_val_loss < best_loss:
+                best_loss = avg_val_loss
+                best_params = {'embedding_dim': dim, 'lr': lr}
+                
+    print(f"Transformer Grid Search finished. Best Params: {best_params} (Val Loss: {best_loss:.4f})", flush=True)
+    return best_params
+
 if __name__ == "__main__":
     train_transformer()

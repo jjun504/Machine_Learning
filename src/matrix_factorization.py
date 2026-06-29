@@ -204,7 +204,82 @@ def train_matrix_factorization():
         pickle.dump(mappings, f)
         
     return model, mappings
- 
+
+def grid_search_mf(param_grid=None):
+    """
+    Performs grid search over NCF hyperparameters on a small sample of users
+    for speed, and prints the validation metrics for each combination.
+    """
+    if param_grid is None:
+        param_grid = {
+            'embedding_dim': [32, 64],
+            'lr': [0.005, 0.01]
+        }
+    
+    print("Preparing data for NCF Grid Search...", flush=True)
+    orders_sample = pd.read_csv(config.ORDERS_SAMPLE_PATH)
+    prior_sample = pd.read_csv(config.PRIOR_PRODUCTS_SAMPLE_PATH)
+    
+    users_all, products_all, labels_all, mappings = prepare_mf_data(orders_sample, prior_sample)
+    
+    # Subsample for faster search
+    np.random.seed(config.RANDOM_SEED)
+    subset_indices = np.random.choice(len(users_all), size=min(10000, len(users_all)), replace=False)
+    u_sub = users_all[subset_indices]
+    p_sub = products_all[subset_indices]
+    y_sub = labels_all[subset_indices]
+    
+    split = int(len(u_sub) * 0.8)
+    u_train, u_val = u_sub[:split], u_sub[split:]
+    p_train, p_val = p_sub[:split], p_sub[split:]
+    y_train, y_val = y_sub[:split], y_sub[split:]
+    
+    best_loss = float('inf')
+    best_params = {}
+    
+    print("NCF Grid Search started...", flush=True)
+    for dim in param_grid['embedding_dim']:
+        for lr in param_grid['lr']:
+            model = MatrixFactorization(mappings['num_users'], mappings['num_products_vocab'], dim)
+            loss_fn = nn.BCEWithLogitsLoss()
+            optimizer = nn.Adam(model.trainable_params(), learning_rate=lr)
+            
+            def forward_fn(u, p, y):
+                return loss_fn(model(u, p), y)
+            
+            grad_fn = ms.value_and_grad(forward_fn, None, optimizer.parameters)
+            
+            model.set_train()
+            batch_size = 512
+            # Train for 1 epoch
+            for i in range(0, len(u_train), batch_size):
+                u_b = ms.Tensor(u_train[i:i+batch_size], dtype=ms.int32)
+                p_b = ms.Tensor(p_train[i:i+batch_size], dtype=ms.int32)
+                y_b = ms.Tensor(y_train[i:i+batch_size], dtype=ms.float32)
+                loss, grads = grad_fn(u_b, p_b, y_b)
+                optimizer(grads)
+            
+            # Eval
+            model.set_train(False)
+            val_loss = 0.0
+            val_steps = 0
+            for i in range(0, len(u_val), batch_size):
+                u_b = ms.Tensor(u_val[i:i+batch_size], dtype=ms.int32)
+                p_b = ms.Tensor(p_val[i:i+batch_size], dtype=ms.int32)
+                y_b = ms.Tensor(y_val[i:i+batch_size], dtype=ms.float32)
+                loss = loss_fn(model(u_b, p_b), y_b)
+                val_loss += float(loss.asnumpy())
+                val_steps += 1
+                
+            avg_val_loss = val_loss / val_steps
+            print(f"NCF Grid Search trial: embedding_dim={dim}, lr={lr} -> Val Loss={avg_val_loss:.4f}", flush=True)
+            if avg_val_loss < best_loss:
+                best_loss = avg_val_loss
+                best_params = {'embedding_dim': dim, 'lr': lr}
+                
+    print(f"NCF Grid Search finished. Best Params: {best_params} (Val Loss: {best_loss:.4f})", flush=True)
+    return best_params
+
 def load_mf_model_and_mappings():
     """
     Helper function for load model and mappings

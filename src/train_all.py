@@ -93,9 +93,93 @@ def compute_rec_metrics(y_true, scores, candidates_df, K=10):
         'MRR': mean_mrr
     }
 
+def compute_rec_metrics_full(val_preds_vocab, val_targets, num_products_vocab, K=10):
+    """
+    Compute Precision@K, Recall@K, Hit Rate@K, NDCG@K, MRR, and ROC AUC
+    for the full vocabulary predictions of the Transformer model.
+    """
+    user_precisions = []
+    user_recalls = []
+    user_hits = []
+    user_ndcgs = []
+    user_mrrs = []
+    user_aucs = []
+    
+    for idx, actual_list in enumerate(val_targets):
+        actual_set = set(actual_list)
+        if len(actual_set) == 0:
+            continue
+            
+        probs_j = val_preds_vocab[idx]
+        
+        # Top-K predictions descending
+        top_k_preds = np.argsort(probs_j)[-K:][::-1]
+        
+        hits = len(set(top_k_preds).intersection(actual_set))
+        precision = hits / K
+        user_precisions.append(precision)
+        
+        recall = hits / len(actual_set)
+        user_recalls.append(recall)
+        
+        hit = 1.0 if hits > 0 else 0.0
+        user_hits.append(hit)
+        
+        dcg = 0.0
+        for rank_idx, item in enumerate(top_k_preds):
+            if item in actual_set:
+                dcg += 1.0 / np.log2(rank_idx + 2)
+                
+        idcg = 0.0
+        for rank_idx in range(min(K, len(actual_set))):
+            idcg += 1.0 / np.log2(rank_idx + 2)
+            
+        ndcg = dcg / idcg if idcg > 0 else 0.0
+        user_ndcgs.append(ndcg)
+        
+        mrr = 0.0
+        for rank_idx, item in enumerate(top_k_preds):
+            if item in actual_set:
+                mrr = 1.0 / (rank_idx + 1)
+                break
+        user_mrrs.append(mrr)
+        
+        # ROC AUC
+        y_true_j = np.zeros(num_products_vocab, dtype=int)
+        actual_list_valid = [p for p in actual_list if p < num_products_vocab]
+        if len(actual_list_valid) > 0:
+            y_true_j[actual_list_valid] = 1
+            try:
+                auc = roc_auc_score(y_true_j, probs_j)
+                user_aucs.append(auc)
+            except ValueError:
+                pass
+                
+    mean_precision = np.mean(user_precisions)
+    mean_recall = np.mean(user_recalls)
+    mean_hit_rate = np.mean(user_hits)
+    mean_ndcg = np.mean(user_ndcgs)
+    mean_mrr = np.mean(user_mrrs)
+    mean_auc = np.mean(user_aucs) if user_aucs else 0.5
+    
+    if mean_precision + mean_recall > 0:
+        f1 = 2 * mean_precision * mean_recall / (mean_precision + mean_recall)
+    else:
+        f1 = 0.0
+        
+    return {
+        'ROC AUC': mean_auc,
+        'F1@K': f1,
+        'Precision@K': mean_precision,
+        'Recall@K': mean_recall,
+        'Hit Rate@K': mean_hit_rate,
+        'NDCG@K': mean_ndcg,
+        'MRR': mean_mrr
+    }
+
 def evaluate_all_models(times=None):
     """
-    Runs the comprehensive metrics calculation for all three models
+    Runs the comprehensive metrics calculation for all four models (including Full vs Fair Transformer)
     and returns a pandas DataFrame with the results.
     """
     print("Running comprehensive recommendation metrics benchmarking...")
@@ -122,7 +206,7 @@ def evaluate_all_models(times=None):
     xgb_metrics = compute_rec_metrics(y_val, xgb_probs, candidates_val)
     
     # 3. Transformer Evaluation (Candidate-restricted)
-    print("Evaluating Transformer (Fair Comparison on Candidates)...")
+    print("Evaluating Transformer (Fair Comparison on Candidates & Full Vocab)...")
     orders_sample = pd.read_csv(config.ORDERS_SAMPLE_PATH)
     prior_sample = pd.read_csv(config.PRIOR_PRODUCTS_SAMPLE_PATH)
     train_sample = pd.read_csv(config.TRAIN_PRODUCTS_SAMPLE_PATH)
@@ -179,13 +263,18 @@ def evaluate_all_models(times=None):
     candidates_val['tf_score'] = tf_scores
     tf_metrics = compute_rec_metrics(y_val, candidates_val['tf_score'].values, candidates_val)
     
+    # 4. Evaluate Transformer Full Vocab metrics
+    val_targets = [dataset['targets'][i] for i, s in enumerate(dataset['splits']) if s == 'val']
+    tf_full_metrics = compute_rec_metrics_full(val_preds_vocab, val_targets, num_products_vocab)
+    
     # ----------------------------------------------------
     # Compile Results DataFrame
     # ----------------------------------------------------
     results = [
         {**{'Model': 'Matrix Factorization (NCF)'}, **mf_metrics, **{'Training Time': f"{times['Matrix Factorization']/60:.2f} min" if times else "N/A"}},
         {**{'Model': 'XGBoost (Classifier)'}, **xgb_metrics, **{'Training Time': f"{times['XGBoost']/60:.2f} min" if times else "N/A"}},
-        {**{'Model': 'Sequential Transformer'}, **tf_metrics, **{'Training Time': f"{times['Transformer']/60:.2f} min" if times else "N/A"}}
+        {**{'Model': 'Sequential Transformer (Fair)'}, **tf_metrics, **{'Training Time': f"{times['Transformer']/60:.2f} min" if times else "N/A"}},
+        {**{'Model': 'Sequential Transformer (Full)'}, **tf_full_metrics, **{'Training Time': f"{times['Transformer']/60:.2f} min" if times else "N/A"}}
     ]
     
     df_results = pd.DataFrame(results)

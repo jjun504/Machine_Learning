@@ -270,5 +270,64 @@ def train_xgboost():
         
     return model, metrics
 
+def grid_search_xgboost(param_grid=None):
+    """
+    Perform Grid Search for XGBoost on a small sample of candidates
+    """
+    if param_grid is None:
+        param_grid = {
+            'max_depth': [3, 5],
+            'learning_rate': [0.05, 0.1]
+        }
+        
+    from sklearn.metrics import log_loss
+    
+    print("Preparing data for XGBoost Grid Search...", flush=True)
+    candidates = extract_features_and_candidates()
+    feature_cols = [
+        'user_total_orders', 'user_avg_basket_size', 'user_reorder_rate', 'user_avg_days_since_prior_order',
+        'product_total_orders', 'product_reorder_rate', 'product_avg_add_to_cart',
+        'up_total_orders', 'up_avg_add_to_cart', 'up_purchase_rate', 'up_last_order_distance',
+        'mf_score'
+    ]
+    
+    train_data = candidates[candidates['split'] == 'train']
+    val_data = candidates[candidates['split'] == 'val']
+    
+    # Subsample candidates for speed
+    np.random.seed(config.RANDOM_SEED)
+    train_subset = train_data.sample(n=min(5000, len(train_data)))
+    val_subset = val_data.sample(n=min(2000, len(val_data)))
+    
+    X_train = train_subset[feature_cols].values
+    y_train = train_subset['target'].values
+    X_val = val_subset[feature_cols].values
+    y_val = val_subset['target'].values
+    
+    best_loss = float('inf')
+    best_params = {}
+    
+    print("XGBoost Grid Search started...", flush=True)
+    for depth in param_grid['max_depth']:
+        for lr in param_grid['learning_rate']:
+            model = XGBClassifier(
+                n_estimators=50,  # small for speed
+                learning_rate=lr,
+                max_depth=depth,
+                random_state=config.RANDOM_SEED,
+                eval_metric='logloss'
+            )
+            model.fit(X_train, y_train)
+            
+            preds = model.predict_proba(X_val)[:, 1]
+            loss = log_loss(y_val, preds)
+            print(f"XGBoost Grid Search trial: max_depth={depth}, learning_rate={lr} -> Val Logloss={loss:.4f}", flush=True)
+            if loss < best_loss:
+                best_loss = loss
+                best_params = {'max_depth': depth, 'learning_rate': lr}
+                
+    print(f"XGBoost Grid Search finished. Best Params: {best_params} (Val Logloss: {best_loss:.4f})", flush=True)
+    return best_params
+
 if __name__ == "__main__":
     train_xgboost()

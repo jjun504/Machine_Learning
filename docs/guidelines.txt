@@ -1,0 +1,95 @@
+TML6223 Machine Learning
+Term 2610
+Project (40%)
+
+1.0 Introduction
+This project challenges students to develop the applications of machine learning (ML) in one of the following 5 domains:
+1.	Finance and banking
+2.	Smart business and retail
+3.	Industry manufacturing
+4.	Transportation and logistic
+5.	Energy Consumption 
+Students must identify a real-life need in this domain and propose an AI-driven solution that leverages machine learning models to provide social and commercial values. 
+You are encouraging to participate in Huawei ICT Innovative Competition, where the condition is: 
+1.	You need to integrate Huawei technologies such as MindSpore or other relevant Huawei cloud computing resources 
+2.	However, number of members is THREE.
+You may form a team of 3 from your existing group or collaborate with members from other groups. Your original project group structure will remain unchanged for coursework assessment.
+2.0 Grouping
+•	Students must form groups of minimum 2 to maximum 3 members regardless of lab section.
+•	The grouping will be based on the assignment grouping. 
+3.0 Dataset Collection
+Students must use public datasets from reliable sources such as:
+•	Kaggle (https://www.kaggle.com/)
+•	Google Dataset Search (https://datasetsearch.research.google.com/)
+•	UCI Machine Learning Repository (https://archive.ics.uci.edu/ml/index.php)
+•	Government Open Data Portals (any government open data portals)
+4.0 Model Development
+5.1 Model Selection
+•	Select at least three suitable machine learning models, such as:
+o	Random Forest, SVM, Decision Tree, regression etc or clustering algorithms (the choices of model could be: different type of ML, or similar type but different version such as SVM, but different versions of SVM, of course must align with your literature review) 
+o	RNN, LSTMs (for time-series)
+o	AutoML or pre-trained models (e.g., TensorFlow, PyTorch, Huawei MindSpore)
+5.2 Training & Evaluation
+•	Pre-process data (handling missing values, normalization, feature engineering etc)
+•	Train and test models on labelled datasets; otherwise only test the models directly
+•	Apply appropriate evaluation metrics according to problem type (for e.g., if it is classification, use accuracy, precision, recall, F1-score, and confusion matrix)
+•	Hyperparameter tuning to optimize performance
+6.0 Entrepreneurial Application & Solution Development
+6.1 Real-World Implementation
+•	Explain the motivation with facts and evidence support (such as articles, news or market survey/interview)
+•	Describe the ideas and features, how the model will be deployed and its usefulness and application.
+6.2 Business & Innovation Aspect
+•	Identify potential users (government, businesses, citizens).
+•	Analyze commercial value and scalability (you may consider SWOT analysis)
+•	Integrate Huawei AI technologies (if you want to join Huawei ICT Competition) where applicable.
+For students who are interested to further develop your solution, you may read this blog and watch the sample video about Huawei ICT Innovative Competition (2021-2022): https://www.youtube.com/watch?v=7bE3Y9s1cQQ  
+7.0 Evaluation & Testing
+•	Analysis: Report and compare model performance.
+•	Benchmarking: compare your results with the existing works. The best is the model achievement is compatible with the other works under similar experiment setup (for e.g.: similar datasets, similar train/test splitting). However, in case you cannot get a good result, please justify with appropriate reasonable reasons.
+•	Limitations & Improvements: Suggest future enhancements for scalability.
+8.0 Presentation & Report
+•	Report: Document dataset collection, model development, evaluation, and real-world application proposal. Maximum number of pages: 35 (including references). 
+•	Presentation: Showcase the findings, model performance, and application proposal to peers or industry experts.
+8.1 Report Contents and Format (use the template in Appendix C)
+1.	Title, name of group members and affiliation, abstract: 200-250 words, keywords (minimum 3 maximum 5)
+2.	Introduction (problem statement, domain selection)
+3.	Problem Statements and Objectives
+•	Identify gaps in the literature and justify why they are important
+•	Outline problem statement 
+•	Propose objectives that can solve the problem statements
+4.	Related works (you can obtain related works from your assignment but these related works must connect to your gaps and objectives in this project )
+5.	Dataset & Pre-processing (data sources, cleaning, feature selection)
+6.	Methodology and Model Selection (justify why certain methods or models are selected)
+7.	Experimental Setup and Training (model architectures, performance evaluation)
+8.	Evaluation, Discussion & Conclusion (limitations, future work)
+9.	Solution & Business Proposal (real-world integration, scalability, Huawei technology use)
+10.	Conclusion
+11.	References
+8.3 Guidelines in using Generative AI
+o	Generative AI and AI-assisted technologies should only be used in the writing process to improve the readability and language of the manuscript.
+o	The technology must be applied with human oversight and control and authors should carefully review and edit the result, as AI can generate authoritative-sounding output that can be incorrect, incomplete or biased. Authors are ultimately responsible and accountable for the contents of the work.
+o	Do not use of Generative AI or AI-assisted tools to create or alter images in submitted project.
+o	You must declare the use of generative AI in scientific writing upon submission of the paper. The following guidance refers only to the writing process, and not to the use of AI tools to analyse and draw insights from data as part of the study process. The sample declaration is as below:
+1.	Create a new section before references: Declaration of generative AI and AI-assisted technologies in the writing process.
+2.	Statement: During the preparation of this work the author(s) used [NAME TOOL / SERVICE] in order to [REASON]. After using this tool/service, the author(s) reviewed and edited the content as needed and take(s) full responsibility for the content of the published article.
+o	The declaration does not apply to the use of basic tools, such as tools used to check grammar, spelling and references. If you have nothing to disclose, you do not need to add a statement.
+o	You must not list or cite AI and AI-assisted technologies as an author or co-author on the manuscript since authorship implies responsibilities and tasks that can only be attributed to and performed by humans.
+9.0 Important Dates:
+o	Due of group registration (week 2): 12 April 2026
+o	The due of report submission is (week 14): 3 July 2026
+o	Presentation time frame (week 15): from 6 July – 10 July (will be announced)
+o	Peer Evaluation (excluding yourself) due by 3 July 2026: Peer Evaluation (TML6223) – Fill in form
+
+
+10.0 Submission should include:
+	Group declaration form (Appendix A)
+	Report in pdf
+	Source code 
+	Presentation slides 
+	Turnitin report (less than 10% similarity, untick ‘store in data repository’ at the setting)
+	Appendix B Marking Rubric (fill up ID and Name at peer evaluation)
+
+11.0 Marking Rubrics
+Total Marks: 40
+For details, refer Appendix B
+
