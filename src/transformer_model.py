@@ -218,6 +218,7 @@ def train_transformer():
     
     num_train = len(seqs_train)
     batch_size = config.TRANSFORMER_BATCH_SIZE
+    epoch_losses = []
     
     for epoch in range(config.TRANSFORMER_EPOCHS):
         # Shuffle train data
@@ -250,6 +251,7 @@ def train_transformer():
             steps += 1
             
         avg_loss = epoch_loss / steps
+        epoch_losses.append(avg_loss)
         print(f"Epoch {epoch + 1}/{config.TRANSFORMER_EPOCHS}: Loss = {avg_loss:.4f}", flush=True)
         
     # Save checkpoint
@@ -332,7 +334,8 @@ def train_transformer():
     # Save validation metrics
     metrics = {
         'roc_auc': mean_auc,
-        'f1_score': mean_f1
+        'f1_score': mean_f1,
+        'loss_history': epoch_losses
     }
     with open(os.path.join(config.PROCESSED_DATA_DIR, "transformer_metrics.pkl"), "wb") as f:
         pickle.dump(metrics, f)

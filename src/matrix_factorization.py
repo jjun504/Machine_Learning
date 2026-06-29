@@ -169,6 +169,7 @@ def train_matrix_factorization():
     num_samples = len(users_all)
     batch_size = config.MF_BATCH_SIZE
     
+    epoch_losses = []
     for epoch in range(config.MF_EPOCHS):
         # Shuffle at the beginning of each epoch
         indices = np.random.permutation(num_samples)
@@ -189,12 +190,19 @@ def train_matrix_factorization():
             steps += 1
             
         avg_loss = epoch_loss / steps
+        epoch_losses.append(avg_loss)
         print(f"Epoch {epoch + 1}/{config.MF_EPOCHS}: Loss = {avg_loss:.4f}", flush=True)
         
     # Save checkpoint of model
     ckpt_path = os.path.join(config.PROCESSED_DATA_DIR, "mf_model.ckpt")
     ms.save_checkpoint(model, ckpt_path)
     print(f"Matrix Factorization model save to {ckpt_path}", flush=True)
+    
+    # Save loss history in mappings
+    mappings['loss_history'] = epoch_losses
+    with open(os.path.join(config.PROCESSED_DATA_DIR, "mf_mappings.pkl"), "wb") as f:
+        pickle.dump(mappings, f)
+        
     return model, mappings
  
 def load_mf_model_and_mappings():

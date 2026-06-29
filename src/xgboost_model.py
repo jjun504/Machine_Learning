@@ -236,9 +236,11 @@ def train_xgboost():
     print("Optimizing classification threshold for Mean F1-Score...")
     best_f1 = 0
     best_thresh = 0.2
+    threshold_sweeps = []
     
     for thresh in np.arange(0.1, 0.5, 0.05):
         f1 = calculate_mean_f1(y_val, val_preds, val_data, threshold=thresh)
+        threshold_sweeps.append((float(thresh), float(f1)))
         print(f"  Threshold {thresh:.2f} | Mean F1: {f1:.4f}")
         if f1 > best_f1:
             best_f1 = f1
@@ -252,10 +254,15 @@ def train_xgboost():
         print(f"  Feature {name:30s} | Importance: {imp:.4f}")
         
     # Save results
+    evals_result = model.evals_result()
+    validation_logloss = evals_result['validation_0']['logloss']
+    
     metrics = {
         'roc_auc': roc_auc,
         'best_f1': best_f1,
         'best_threshold': best_thresh,
+        'threshold_sweeps': threshold_sweeps,
+        'loss_history': validation_logloss,
         'feature_importances': dict(zip(feature_cols, importances.tolist()))
     }
     with open(os.path.join(config.PROCESSED_DATA_DIR, "xgb_metrics.pkl"), "wb") as f:
